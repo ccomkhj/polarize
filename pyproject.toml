@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "polarize"
+version = "0.1.0"
+description = "Agent-native CLI to discover compute-heavy pandas code and validate Polars conversions"
+readme = "GUIDE.md"
+requires-python = ">=3.10"
+license = "MIT"
+dependencies = [
+    "click>=8.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-benchmark>=4.0",
+    "pandas>=2.0",
+    "polars>=0.20",
+]
+
+[project.scripts]
+polarize = "polarize.cli:cli"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/polarize"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
