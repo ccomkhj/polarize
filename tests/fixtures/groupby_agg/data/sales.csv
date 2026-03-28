@@ -1,0 +1,9 @@
+user_id,amount,category
+1,100.0,electronics
+2,200.0,books
+1,150.0,electronics
+3,50.0,books
+2,300.0,electronics
+3,75.0,books
+1,200.0,books
+2,100.0,electronics

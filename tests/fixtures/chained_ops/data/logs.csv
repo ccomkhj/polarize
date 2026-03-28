@@ -1,0 +1,9 @@
+user_id,action,duration,status
+1,click,1.5,success
+2,click,2.0,error
+1,view,0.5,success
+3,click,3.0,success
+2,view,1.0,success
+1,click,2.5,error
+3,view,0.8,success
+2,click,1.2,success
