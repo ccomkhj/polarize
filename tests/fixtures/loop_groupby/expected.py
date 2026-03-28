@@ -9,6 +9,7 @@ def main(data_path: str) -> pl.DataFrame:
         df.group_by(["region", "month"])
         .agg(pl.col("revenue").sum())
         .sort(["region", "month"])
+        .select(["month", "revenue", "region"])
     )
     return result
 
