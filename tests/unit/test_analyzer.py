@@ -22,6 +22,19 @@ def test_detects_import_pandas_custom_alias():
     assert result.pandas_alias == "panda"
 
 
+def test_detects_from_pandas_imports():
+    source = textwrap.dedent("""\
+        from pandas import read_csv, concat
+        df = read_csv("a.csv")
+        result = concat([df, df])
+    """)
+    result = analyze_source(source)
+    assert result.pandas_alias == "pandas"
+    assert len(result.read_calls) == 1
+    assert result.read_calls[0].method == "read_csv"
+    assert [op.operation for op in result.operations] == ["concat"]
+
+
 def test_detects_no_pandas():
     source = textwrap.dedent("""\
         import json
@@ -55,6 +68,17 @@ def test_detects_merge():
     ops = [op for op in result.operations if op.operation == "merge"]
     assert len(ops) == 1
     assert ops[0].line == 4
+
+
+def test_detects_operations_from_dataframe_constructor():
+    source = textwrap.dedent("""\
+        import pandas as pd
+        df = pd.DataFrame({"id": [2, 1]})
+        result = df.sort_values("id")
+    """)
+    result = analyze_source(source)
+    ops = [op for op in result.operations if op.operation == "sort_values"]
+    assert len(ops) == 1
 
 
 def test_detects_sort_values():
@@ -118,6 +142,21 @@ def test_detects_operation_inside_loop():
     ops = [op for op in result.operations if op.operation == "groupby"]
     assert len(ops) == 1
     assert ops[0].in_loop is True
+
+
+def test_ignores_non_pandas_methods_when_pandas_is_imported():
+    source = textwrap.dedent("""\
+        import pandas as pd
+
+        class Query:
+            def merge(self, other):
+                return self
+
+        q = Query()
+        q.merge(1)
+    """)
+    result = analyze_source(source)
+    assert result.operations == []
 
 
 def test_captures_source_code_snippet():

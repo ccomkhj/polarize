@@ -44,6 +44,37 @@ def test_discover_nonexistent_file():
     assert result.exit_code == 2
 
 
+def test_discover_non_pandas_file_returns_empty_report(tmp_path):
+    runner = CliRunner()
+    input_file = tmp_path / "plain.py"
+    input_file.write_text('print("hello")\n')
+    result = runner.invoke(cli, ["discover", str(input_file)])
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert data["file"] == str(input_file)
+    assert data["operations"] == []
+    assert data["data_sources"] == []
+
+
+def test_discover_recursive_outputs_single_json_document(tmp_path):
+    runner = CliRunner()
+    pandas_file = tmp_path / "pandas_script.py"
+    plain_file = tmp_path / "plain.py"
+    pandas_file.write_text(
+        'import pandas as pd\n'
+        'df = pd.read_csv("data.csv")\n'
+        'df = df.sort_values("id")\n'
+    )
+    plain_file.write_text('print("hello")\n')
+
+    result = runner.invoke(cli, ["discover", str(tmp_path), "--recursive"])
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert data["path"] == str(tmp_path)
+    assert len(data["reports"]) == 1
+    assert data["reports"][0]["file"] == str(pandas_file)
+
+
 def test_validate_pass(tmp_path):
     original = tmp_path / "original.py"
     converted = tmp_path / "converted.py"
@@ -70,6 +101,22 @@ def test_validate_fail(tmp_path):
     assert result.exit_code == 1
     data = json.loads(result.output)
     assert data["status"] == "fail"
+
+
+def test_validate_syntax_error_returns_failure_json(tmp_path):
+    original = tmp_path / "original.py"
+    converted = tmp_path / "converted.py"
+    original.write_text('print("ok")\n')
+    converted.write_text("def broken(:\n    pass\n")
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["validate", "--original", str(original), "--converted", str(converted)],
+    )
+    assert result.exit_code == 1
+    data = json.loads(result.output)
+    assert data["status"] == "fail"
+    assert data["checks"][0]["check"] == "syntax"
 
 
 def test_validate_with_script_args(tmp_path):

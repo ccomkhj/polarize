@@ -4,13 +4,12 @@ from __future__ import annotations
 import json
 import os
 import sys
+from typing import Any
 
 import click
 
-from polarize.discovery.analyzer import analyze_file
-from polarize.discovery.scorer import score_operations, BASE_SCORES, HIGH_THRESHOLD, MEDIUM_THRESHOLD
-from polarize.reporter.report import build_discover_report
-from polarize.validator.validator import check_syntax, check_imports, run_and_compare
+from polarize.app import discover_path, validate_conversion
+from polarize.discovery.scorer import BASE_SCORES, HIGH_THRESHOLD, MEDIUM_THRESHOLD
 from polarize.profiler.profiler import profile_scripts
 
 
@@ -39,35 +38,13 @@ def discover(path: str, threshold: str, recursive: bool, output_format: str):
         click.echo(json.dumps({"error": f"Path not found: {path}"}), err=True)
         sys.exit(2)
 
-    files = []
-    if os.path.isfile(path):
-        files = [path]
-    elif os.path.isdir(path) and recursive:
-        for root, _, filenames in os.walk(path):
-            for f in filenames:
-                if f.endswith(".py"):
-                    files.append(os.path.join(root, f))
-    elif os.path.isdir(path):
-        files = [os.path.join(path, f) for f in os.listdir(path) if f.endswith(".py")]
+    report = discover_path(path, threshold=threshold, recursive=recursive)
 
-    for file_path in files:
-        analysis = analyze_file(file_path)
-        if analysis.pandas_alias is None:
-            continue
-        scored = score_operations(analysis.operations)
-        report = build_discover_report(file_path, scored, analysis.read_calls, threshold=threshold)
+    if output_format == "json":
+        click.echo(json.dumps(report, indent=2))
+        return
 
-        if output_format == "json":
-            click.echo(json.dumps(report, indent=2))
-        else:
-            click.echo(f"File: {report['file']}")
-            click.echo(f"Total ops: {report['summary']['total_ops']}, "
-                       f"Compute-heavy: {report['summary']['compute_heavy_ops']}")
-            click.echo(f"Conversion order: {report['summary']['suggested_conversion_order']}")
-            click.echo("")
-            for op in report["operations"]:
-                ctx = f" ({op['context']})" if "context" in op else ""
-                click.echo(f"  L{op['line']} [{op['compute_weight']}] {op['operation']}: {op['code']}{ctx}")
+    _echo_discover_text(report)
 
 
 @cli.command()
@@ -76,22 +53,9 @@ def discover(path: str, threshold: str, recursive: bool, output_format: str):
 @click.argument("script_args", nargs=-1, type=click.UNPROCESSED)
 def validate(original: str, converted: str, script_args: tuple):
     """Validate that converted script produces equivalent output."""
-    with open(converted) as f:
-        converted_source = f.read()
-    checks = []
-    syntax_result = check_syntax(converted_source)
-    checks.append(syntax_result)
-    import_result = check_imports(converted_source)
-    checks.append(import_result)
-    equiv_result = run_and_compare(original, converted, list(script_args))
-    checks.append(equiv_result)
-    all_passed = all(c.passed for c in checks)
-    output = {
-        "status": "pass" if all_passed else "fail",
-        "checks": [{"check": c.check, "passed": c.passed, "message": c.message} for c in checks],
-    }
+    output = validate_conversion(original, converted, list(script_args))
     click.echo(json.dumps(output, indent=2))
-    sys.exit(0 if all_passed else 1)
+    sys.exit(0 if output["status"] == "pass" else 1)
 
 
 @cli.command()
@@ -119,3 +83,33 @@ def ops(threshold: str):
         if weight_rank[weight] >= min_rank:
             operations.append({"name": name, "compute_weight": weight, "base_score": base_score})
     click.echo(json.dumps({"operations": operations}, indent=2))
+
+
+def _echo_discover_text(report: dict[str, Any]) -> None:
+    reports = _discover_reports(report)
+    if not reports:
+        click.echo("No pandas operations found.")
+        return
+
+    for index, item in enumerate(reports):
+        if index > 0:
+            click.echo("")
+        click.echo(f"File: {item['file']}")
+        click.echo(
+            f"Total ops: {item['summary']['total_ops']}, "
+            f"Compute-heavy: {item['summary']['compute_heavy_ops']}"
+        )
+        click.echo(f"Conversion order: {item['summary']['suggested_conversion_order']}")
+        click.echo("")
+        for op in item["operations"]:
+            ctx = f" ({op['context']})" if "context" in op else ""
+            click.echo(
+                f"  L{op['line']} [{op['compute_weight']}] "
+                f"{op['operation']}: {op['code']}{ctx}"
+            )
+
+
+def _discover_reports(report: dict[str, Any]) -> list[dict[str, Any]]:
+    if "file" in report:
+        return [report]
+    return report["reports"]

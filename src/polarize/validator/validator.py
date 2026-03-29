@@ -24,12 +24,25 @@ def check_syntax(source: str) -> ValidationResult:
 
 
 def check_imports(source: str) -> ValidationResult:
-    tree = ast.parse(source)
+    try:
+        tree = ast.parse(source)
+    except SyntaxError as error:
+        return ValidationResult(
+            check="imports",
+            passed=False,
+            message=f"Cannot verify imports due to syntax error at line {error.lineno}: {error.msg}",
+        )
+
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                if alias.name == "polars":
+                if alias.name == "polars" or alias.name.startswith("polars."):
                     return ValidationResult(check="imports", passed=True, message="Polars import found")
+        if isinstance(node, ast.ImportFrom):
+            if node.module == "polars" or (
+                node.module is not None and node.module.startswith("polars.")
+            ):
+                return ValidationResult(check="imports", passed=True, message="Polars import found")
     return ValidationResult(check="imports", passed=False, message="Polars import not found in converted file")
 
 

@@ -34,6 +34,15 @@ def test_check_imports_polars_present():
     assert result.passed is True
 
 
+def test_check_imports_from_polars_present():
+    source = textwrap.dedent("""\
+        from polars import read_csv
+        df = read_csv("data.csv")
+    """)
+    result = check_imports(source)
+    assert result.passed is True
+
+
 def test_check_imports_polars_missing():
     source = textwrap.dedent("""\
         import pandas as pd
@@ -42,6 +51,12 @@ def test_check_imports_polars_missing():
     result = check_imports(source)
     assert result.passed is False
     assert "polars" in result.message.lower()
+
+
+def test_check_imports_invalid_syntax():
+    result = check_imports("def broken(:\n    pass\n")
+    assert result.passed is False
+    assert "syntax error" in result.message.lower()
 
 
 def test_run_and_compare_identical_output(tmp_path):
